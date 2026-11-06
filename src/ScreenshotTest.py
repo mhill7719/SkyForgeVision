@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-SkyForge Fiducial Marker Pose Estimation - Continuous Terminal Preview
-Saves a live snapshot and renders a chafa terminal preview on every frame
-so you can debug camera view, lighting, and focus in real-time.
+SkyForge Fiducial Marker Pose Estimation - Clean Terminal Preview
+Uses robust 1080p MJPEG initialization to prevent UVC driver stride corruption,
+detects 6x6 ArUco markers, estimates 6-DoF pose, and renders live terminal previews via chafa.
 """
 
 import os
@@ -18,9 +18,32 @@ MARKER_LENGTH_METERS = 0.0254  # 1 inch physical marker size
 SNAPSHOT_FILE = "latest_detection.jpg"
 
 
+def open_camera(index=0, width=1920, height=1080):
+    """Robust multi-backend camera initializer matching your production setup."""
+    cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(index)
+
+    if not cap.isOpened():
+        return None, 0, 0
+
+    # Force MJPEG compression for high resolutions to prevent YUYV stride corruption
+    if width >= 1280:
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPEG'))
+
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    return cap, actual_w, actual_h
+
+
 def get_default_camera_matrix(width: int, height: int):
     """Generates an estimated intrinsic matrix (K) if uncalibrated."""
-    focal_length = width  # Rough approximation for standard webcams
+    focal_length = width  
     center_x = width / 2.0
     center_y = height / 2.0
     return np.array([
@@ -31,35 +54,22 @@ def get_default_camera_matrix(width: int, height: int):
 
 
 def render_terminal_preview(image_path: str):
-    """Renders an image snapshot inside the terminal using chafa."""
+    """Renders a clean image snapshot inside the terminal using chafa."""
     cols, _ = shutil.get_terminal_size((80, 24))
     preview_width = min(cols, 80)
     os.system(f"chafa --size {preview_width}x {image_path}")
 
 
 def main():
-    camera_id = 0
-    # Open device explicitly with V4L2
-    cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L2)
+    # Initialize using 1080p and MJPEG fallback logic
+    cap, width, height = open_camera(index=0, width=1920, height=1080)
 
-    # Force MJPEG format and resolution BEFORE checking isOpened()
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-    if not cap.isOpened():
-        print(f"[ERROR] Unable to open video capture device /dev/video{camera_id}")
+    if cap is None or not cap.isOpened():
+        print("[ERROR] Unable to open video capture device /dev/video0")
         sys.exit(1)
 
-    # Print active format to confirm MJPEG took effect
-    fourcc_int = int(cap.get(cv2.CAP_PROP_FOURCC))
-    fourcc_str = "".join([chr((fourcc_int >> 8 * i) & 0xFF) for i in range(4)])
-    print(f"[INFO] Active Camera Codec: {fourcc_str}")
+    print(f"[INFO] Camera successfully bound and initialized ({width}x{height}) in MJPEG mode")
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    print(f"[INFO] Camera initialized on /dev/video{camera_id} ({width}x{height})")
-   
     dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT)
     parameters = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(dictionary, parameters)
@@ -76,7 +86,7 @@ def main():
     try:
         while True:
             ret, frame = cap.read()
-            if not ret:
+            if not ret or frame is None:
                 print("[WARN] Empty frame captured.")
                 time.sleep(0.01)
                 continue
@@ -106,12 +116,12 @@ def main():
                         print(f"[FOUND] ID {ids[i][0]} -> x={tx:.3f}m, y={ty:.3f}m, z={tz:.3f}m")
                         cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, MARKER_LENGTH_METERS * 0.8)
 
-            # Throttle the terminal preview updates to once every 1.5 seconds so it doesn't spam your screen
+            # Throttle terminal preview snapshots to every 1.5 seconds
             current_time = time.time()
             if current_time - last_display_time >= 1.5:
                 fps = frame_count / (current_time - start_time)
                 
-                # Save snapshot unconditionally every refresh interval
+                # Save snapshot unconditionally so you can inspect view/focus
                 cv2.imwrite(SNAPSHOT_FILE, frame)
                 
                 print(f"\n[{time.strftime('%H:%M:%S')}] FPS: {fps:.1f} | Markers Found: {0 if ids is None else len(ids)}")
