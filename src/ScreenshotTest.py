@@ -39,21 +39,27 @@ def render_terminal_preview(image_path: str):
 
 def main():
     camera_id = 0
+    # Open device explicitly with V4L2
     cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L2)
+
+    # Force MJPEG format and resolution BEFORE checking isOpened()
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     if not cap.isOpened():
         print(f"[ERROR] Unable to open video capture device /dev/video{camera_id}")
         sys.exit(1)
 
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-   
+    # Print active format to confirm MJPEG took effect
+    fourcc_int = int(cap.get(cv2.CAP_PROP_FOURCC))
+    fourcc_str = "".join([chr((fourcc_int >> 8 * i) & 0xFF) for i in range(4)])
+    print(f"[INFO] Active Camera Codec: {fourcc_str}")
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     print(f"[INFO] Camera initialized on /dev/video{camera_id} ({width}x{height})")
-
+   
     dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT)
     parameters = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(dictionary, parameters)
