@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-SkyForge Fiducial Marker Pose Estimation - Terminal Visualizer
-Evaluates UVC camera feeds headlessly, detects ArUco markers,
-estimates 6-DoF pose, and renders live ASCII/ANSI frame snapshots
-directly inside the terminal console using `chafa`.
+SkyForge Fiducial Marker Pose Estimation - Continuous Terminal Preview
+Saves a live snapshot and renders a chafa terminal preview on every frame
+so you can debug camera view, lighting, and focus in real-time.
 """
 
 import os
@@ -13,7 +12,7 @@ import shutil
 import numpy as np
 import cv2
 
-# Default target ArUco dictionary (6x6 bits, 250 markers)
+# Target ArUco dictionary (6x6 bits, 250 markers)
 ARUCO_DICT = cv2.aruco.DICT_6X6_250
 MARKER_LENGTH_METERS = 0.0254  # 1 inch physical marker size
 SNAPSHOT_FILE = "latest_detection.jpg"
@@ -33,11 +32,8 @@ def get_default_camera_matrix(width: int, height: int):
 
 def render_terminal_preview(image_path: str):
     """Renders an image snapshot inside the terminal using chafa."""
-    # Detect terminal width dynamically (fallback to 80 cols)
     cols, _ = shutil.get_terminal_size((80, 24))
     preview_width = min(cols, 80)
-    
-    # Run chafa to output ANSI block art to console
     os.system(f"chafa --size {preview_width}x {image_path}")
 
 
@@ -57,7 +53,6 @@ def main():
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     print(f"[INFO] Camera initialized on /dev/video{camera_id} ({width}x{height})")
 
-    # Initialize ArUco detector (OpenCV 4.7+ API syntax)
     dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT)
     parameters = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(dictionary, parameters)
@@ -65,11 +60,11 @@ def main():
     camera_matrix = get_default_camera_matrix(width, height)
     dist_coeffs = np.zeros((4, 1), dtype=np.float32)
 
-    print("[INFO] Starting headless vision loop. Press Ctrl+C to exit...\n")
+    print("[INFO] Starting continuous capture loop. Press Ctrl+C to exit...\n")
 
     frame_count = 0
     start_time = time.time()
-    last_log_time = time.time()
+    last_display_time = time.time()
 
     try:
         while True:
@@ -85,56 +80,44 @@ def main():
             # Detect markers
             corners, ids, rejected = detector.detectMarkers(gray)
 
+            # Process markers if found
+            if ids is not None and len(ids) > 0:
+                cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+                for i, corner in enumerate(corners):
+                    obj_points = np.array([
+                        [-MARKER_LENGTH_METERS/2,  MARKER_LENGTH_METERS/2, 0],
+                        [ MARKER_LENGTH_METERS/2,  MARKER_LENGTH_METERS/2, 0],
+                        [ MARKER_LENGTH_METERS/2, -MARKER_LENGTH_METERS/2, 0],
+                        [-MARKER_LENGTH_METERS/2, -MARKER_LENGTH_METERS/2, 0]
+                    ], dtype=np.float32)
+
+                    success, rvec, tvec = cv2.solvePnP(
+                        obj_points, corner[0], camera_matrix, dist_coeffs
+                    )
+                    if success:
+                        tx, ty, tz = tvec.flatten()
+                        print(f"[FOUND] ID {ids[i][0]} -> x={tx:.3f}m, y={ty:.3f}m, z={tz:.3f}m")
+                        cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, MARKER_LENGTH_METERS * 0.8)
+
+            # Throttle the terminal preview updates to once every 1.5 seconds so it doesn't spam your screen
             current_time = time.time()
-            # Process and log telemetry every 1.0 second to keep terminal clean
-            if current_time - last_log_time >= 1.0:
+            if current_time - last_display_time >= 1.5:
                 fps = frame_count / (current_time - start_time)
-
-                if ids is not None and len(ids) > 0:
-                    print(f"\n==================================================")
-                    print(f"[{time.strftime('%H:%M:%S')}] FPS: {fps:.1f} | DETECTED MARKERS: {len(ids)} (IDs: {ids.flatten().tolist()})")
-                    
-                    # Annotate frame with green bounding box and ID label
-                    cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-
-                    # Estimate 3D Pose for each marker
-                    for i, corner in enumerate(corners):
-                        obj_points = np.array([
-                            [-MARKER_LENGTH_METERS/2,  MARKER_LENGTH_METERS/2, 0],
-                            [ MARKER_LENGTH_METERS/2,  MARKER_LENGTH_METERS/2, 0],
-                            [ MARKER_LENGTH_METERS/2, -MARKER_LENGTH_METERS/2, 0],
-                            [-MARKER_LENGTH_METERS/2, -MARKER_LENGTH_METERS/2, 0]
-                        ], dtype=np.float32)
-
-                        success, rvec, tvec = cv2.solvePnP(
-                            obj_points, corner[0], camera_matrix, dist_coeffs
-                        )
-                        if success:
-                            tx, ty, tz = tvec.flatten()
-                            print(f"  └─ Marker ID {ids[i][0]}: Translation (x={tx:.3f}m, y={ty:.3f}m, z={tz:.3f}m)")
-                            # Draw 3D pose RGB axes onto frame
-                            cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, MARKER_LENGTH_METERS * 0.8)
-
-                    # Save image snapshot to disk
-                    cv2.imwrite(SNAPSHOT_FILE, frame)
-                    print(f"  └─ Captured snapshot saved to '{SNAPSHOT_FILE}'")
-                    print("------------------- CONSOLE PREVIEW -------------------")
-                    
-                    # Render image directly inside terminal prompt
-                    render_terminal_preview(SNAPSHOT_FILE)
-                    print("==================================================\n")
-
-                else:
-                    print(f"[{time.strftime('%H:%M:%S')}] FPS: {fps:.1f} | Searching for markers... (Rejected candidates: {len(rejected)})")
-
-                last_log_time = current_time
+                
+                # Save snapshot unconditionally every refresh interval
+                cv2.imwrite(SNAPSHOT_FILE, frame)
+                
+                print(f"\n[{time.strftime('%H:%M:%S')}] FPS: {fps:.1f} | Markers Found: {0 if ids is None else len(ids)}")
+                print("------------------- LIVE CAMERA PREVIEW -------------------")
+                render_terminal_preview(SNAPSHOT_FILE)
+                print("-----------------------------------------------------------\n")
+                
+                last_display_time = current_time
 
     except KeyboardInterrupt:
-        print("\n[INFO] Stopping telemetry process.")
+        print("\n[INFO] Stopping capture process.")
     finally:
         cap.release()
-        total_time = time.time() - start_time
-        print(f"[SUMMARY] Total Frames: {frame_count} | Total Time: {total_time:.2f}s | Avg FPS: {frame_count/total_time:.2f}")
 
 
 if __name__ == "__main__":
