@@ -39,15 +39,16 @@ def render_terminal_preview(image_path: str):
 
 def main():
     camera_id = 0
-    cap = cv2.VideoCapture(camera_id, cv2.CAP_V4L2)
+    cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L2)
 
     if not cap.isOpened():
         print(f"[ERROR] Unable to open video capture device /dev/video{camera_id}")
         sys.exit(1)
 
-    # Force 640x480 resolution for low latency frame capture
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+   
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
