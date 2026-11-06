@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Logitech Webcam & OpenCV V4L2 Diagnostic Suite
-Systematically tests multiple resolutions and FourCC codecs to find
-what the Linux kernel driver and OpenCV are actually accepting.
+Logitech Webcam & OpenCV V4L2 High-Res Diagnostic Suite
+Tests 1080p and 720p configurations with MJPG and raw codecs
+to isolate driver stride mismatches.
 """
 
 import os
@@ -28,26 +28,22 @@ def decode_fourcc(fourcc_int):
 
 def main():
     print("==================================================")
-    print("          LOGITECH WEBCAM V4L2 DIAGNOSTIC         ")
+    print("      LOGITECH WEBCAM HIGH-RES DIAGNOSTIC         ")
     print("==================================================")
 
-    # 1. Check device nodes and permissions
-    print("\n[1] Checking /dev/video* nodes:")
-    print(run_cmd("ls -l /dev/video*"))
-
-    # 2. Check native kernel supported formats via v4l2-ctl
-    print("\n[2] Native kernel formats supported by /dev/video0:")
+    # 1. Check native kernel supported formats via v4l2-ctl
+    print("\n[1] Native kernel formats supported by /dev/video0:")
     print(run_cmd("v4l2-ctl -d /dev/video0 --list-formats-ext"))
 
-    # 3. Test various configurations in OpenCV
-    print("\n[3] Testing OpenCV backend captures across configurations...")
+    # 2. Test high-resolution configurations in OpenCV
+    print("\n[2] Testing high-res OpenCV capture configurations...")
     
     test_configs = [
         {"width": 1920, "height": 1080, "fourcc": "MJPG", "name": "1080p_MJPG"},
+        {"width": 1920, "height": 1080, "fourcc": None,   "name": "1080p_DEFAULT"},
         {"width": 1280, "height": 720,  "fourcc": "MJPG", "name": "720p_MJPG"},
-        {"width": 640,  "height": 480,  "fourcc": "MJPG", "name": "VGA_MJPG"},
-        {"width": 640,  "height": 480,  "fourcc": "YUYV", "name": "VGA_YUYV"},
-        {"width": 640,  "height": 480,  "fourcc": None,   name": "VGA_DEFAULT"}
+        {"width": 1280, "height": 720,  "fourcc": None,   "name": "720p_DEFAULT"},
+        {"width": 640,  "height": 480,  "fourcc": "MJPG", "name": "VGA_MJPG"}
     ]
 
     for cfg in test_configs:
@@ -73,7 +69,7 @@ def main():
 
         print(f"  Driver Accepted -> Res: {actual_w}x{actual_h} | Codec: {actual_fourcc}")
 
-        # Try grabbing a few frames to clear buffer
+        # Try grabbing frames
         success = False
         frame = None
         for _ in range(5):
@@ -86,7 +82,6 @@ def main():
             filename = f"diag_{cfg['name']}.jpg"
             cv2.imwrite(filename, frame)
             
-            # Analyze frame properties
             h, w, c = frame.shape
             mean_val = np.mean(frame)
             std_val = np.std(frame)
@@ -98,8 +93,8 @@ def main():
         cap.release()
 
     print("\n==================================================")
-    print("DIAGNOSTIC COMPLETE. Inspect the generated 'diag_*.jpg'")
-    print("images to see which configuration gives a clean photo.")
+    print("DIAGNOSTIC COMPLETE. Test the generated images using:")
+    print("  chafa diag_1080p_MJPG.jpg")
     print("==================================================")
 
 if __name__ == "__main__":
