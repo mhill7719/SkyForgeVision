@@ -29,7 +29,7 @@ def open_camera(index=0, width=1920, height=1080):
 
     # Force MJPEG compression for high resolutions to prevent YUYV stride corruption
     if width >= 1280:
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPEG'))
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
