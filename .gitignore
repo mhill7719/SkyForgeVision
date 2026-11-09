@@ -1,7 +1,5 @@
 # Computer Vision & Telemetry Outputs
 
-*.jpg
-*.jpeg
 *.png
 *.raw
 *.avi
