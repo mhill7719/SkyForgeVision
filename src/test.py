@@ -82,6 +82,8 @@ def main():
                     cv2.aruco.drawDetectedMarkers(frame, corners, ids)
 
                     # Solve PnP for detected markers
+                    # Solve PnP for detected markers
+                    # Solve PnP for detected markers
                     for i, corner in enumerate(corners):
                         obj_points = np.array([
                             [-MARKER_LENGTH_METERS/2,  MARKER_LENGTH_METERS/2, 0],
@@ -89,15 +91,15 @@ def main():
                             [ MARKER_LENGTH_METERS/2, -MARKER_LENGTH_METERS/2, 0],
                             [-MARKER_LENGTH_METERS/2, -MARKER_LENGTH_METERS/2, 0]
                         ], dtype=np.float32)
-
+            
                         success, rvec, tvec = cv2.solvePnP(
                             obj_points, corner[0], camera_matrix, dist_coeffs
                         )
                         if success:
                             tx, ty, tz = tvec.flatten()
-                            print(f"   └─ Marker ID {ids[i][0]}: Translation (x={tx:.3f}m, y={ty:.3f}m, z={tz:.3f}m)")
-                            # Draw 3D axes onto the frame
-                            cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, MARKER_LENGTH_METERS * 0.8)
+                            # Use ids.flatten()[i] to safely extract the marker ID
+                            marker_id = ids.flatten()[i]
+                            print(f"    └─ Marker ID {marker_id}: Translation (x={tx:.3f}m, y={ty:.3f}m, z={tz:.3f}m)")
 
                     # Save a snapshot of the annotated frame to disk
                     cv2.imwrite("latest_detection.jpg", frame)
@@ -107,6 +109,7 @@ def main():
                     print(f"[{time.strftime('%H:%M:%S')}] FPS: {fps:.1f} | Searching for markers... (Rejected candidates: {len(rejected)})")
                 
                 last_log_time = current_time
+            time.sleep(0.005)
 
     except KeyboardInterrupt:
         print("\n[INFO] Stopping telemetry process.")
