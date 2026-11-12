@@ -33,9 +33,12 @@ def main():
         print(f"[ERROR] Unable to open video capture device /dev/video{camera_id}")
         sys.exit(1)
 
-    # Force standard 640x480 resolution for low latency
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    # Force MJPEG format first so the camera negotiates high-res bandwidth smoothly
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+
+    # Then set your target resolution
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
