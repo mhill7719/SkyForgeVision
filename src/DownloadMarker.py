@@ -1,11 +1,17 @@
 import cv2
 
-# Match your script's dictionary
-dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
+# Must match the dictionary used in your detector
+dictionary = cv2.aruco.getPredefinedDictionary(
+    cv2.aruco.DICT_6X6_250
+)
 
-# Generate Marker ID 0 with a 300x300 pixel canvas
-marker_img = cv2.aruco.generateImageMarker(dictionary, id=0, sidePixels=300)
+marker_id = 0
+marker_pixels = 600
 
-# Save to your current directory
-cv2.imwrite("aruco_marker_0.png", marker_img)
-print("Saved 'aruco_marker_0.png' to disk!")
+# Generate marker with its black border
+marker = cv2.aruco.generateImageMarker(
+    dictionary, marker_id, marker_pixels
+)
+
+cv2.imwrite("aruco_marker_0.png", marker)
+print("Saved aruco_marker_0.png")
